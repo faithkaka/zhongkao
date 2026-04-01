@@ -1,0 +1,201 @@
+/* 用户管理样式 */
+.header-user {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.user-switch-btn {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.3s ease;
+}
+
+.user-switch-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.user-icon {
+    font-size: 16px;
+}
+
+.user-name {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-arrow {
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+/* 用户管理页面 */
+.user-manager {
+    padding: 20px 0;
+}
+
+.add-user-section, .user-list-section {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.add-user-section h3, .user-list-section h3 {
+    color: #667eea;
+    font-size: 16px;
+    margin-bottom: 15px;
+}
+
+.add-user-form {
+    display: flex;
+    gap: 10px;
+}
+
+.add-user-form input {
+    flex: 1;
+    padding: 12px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.add-user-form input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.add-user-btn {
+    padding: 12px 25px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.add-user-btn:active {
+    transform: scale(0.95);
+}
+
+.user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.user-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    transition: all 0.3s;
+}
+
+.user-item:hover {
+    background: #e8e9ea;
+}
+
+.user-item.current {
+    border-color: #667eea;
+    background: #f0f2ff;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-name-text {
+    font-weight: bold;
+    font-size: 15px;
+    color: #333;
+}
+
+.user-stats {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+}
+
+.user-current-badge {
+    background: #667eea;
+    color: white;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+}
+
+.user-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.user-btn {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.user-btn.switch {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.user-btn.switch:hover {
+    background: #bbdefb;
+}
+
+.user-btn.delete {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.user-btn.delete:hover {
+    background: #ffcdd2;
+}
+
+.user-empty {
+    text-align: center;
+    color: #999;
+    padding: 30px 0;
+}
