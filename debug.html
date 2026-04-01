@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调试工具</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        h2 { color: #667eea; }
+        .data-box { background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .btn { background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .btn:hover { background: #764ba2; }
+        pre { background: #2d2d2d; color: #f8f8f2; padding: 15px; overflow: auto; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔧 学习统计调试工具</h2>
+        
+        <div class="data-box">
+            <h3>当前统计数据</h3>
+            <pre id="stats-data">加载中...</pre>
+        </div>
+        
+        <div class="data-box">
+            <h3>历史记录</h3>
+            <pre id="history-data">加载中...</pre>
+        </div>
+        
+        <div class="data-box">
+            <h3>操作</h3>
+            <button class="btn" onclick="clearStats()">清空统计数据</button>
+            <button class="btn" onclick="clearHistory()">清空历史记录</button>
+            <button class="btn" onclick="addTestData()">添加测试数据</button>
+            <button class="btn" onclick="location.reload()">刷新</button>
+        </div>
+    </div>
+    
+    <script>
+        function loadStats() {
+            const stats = JSON.parse(localStorage.getItem('zhongkao_stats') || '{"totalDays":0,"totalQuestions":0,"totalCorrect":0,"accuracy":0}');
+            document.getElementById('stats-data').textContent = JSON.stringify(stats, null, 2);
+        }
+        
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('zhongkao_history') || '[]');
+            document.getElementById('history-data').textContent = history.length > 0 ? 
+                JSON.stringify(history.slice(0, 5), null, 2) + (history.length > 5 ? `\n... 共${history.length}条记录` : '') : '暂无记录';
+        }
+        
+        function clearStats() {
+            localStorage.removeItem('zhongkao_stats');
+            alert('统计数据已清空！');
+            loadStats();
+        }
+        
+        function clearHistory() {
+            localStorage.removeItem('zhongkao_history');
+            alert('历史记录已清空！');
+            loadHistory();
+        }
+        
+        function addTestData() {
+            const testStats = {
+                totalDays: 5,
+                totalQuestions: 150,
+                totalCorrect: 120,
+                accuracy: 80,
+                lastPracticeDate: new Date().toLocaleDateString('zh-CN')
+            };
+            localStorage.setItem('zhongkao_stats', JSON.stringify(testStats));
+            
+            const testHistory = [{
+                id: Date.now().toString(),
+                date: new Date().toLocaleDateString('zh-CN'),
+                time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'}),
+                grade: 7,
+                semester: 'lower',
+                totalQuestions: 30,
+                correctCount: 25,
+                accuracy: 83,
+                duration: 1200
+            }];
+            localStorage.setItem('zhongkao_history', JSON.stringify(testHistory));
+            
+            alert('测试数据已添加！请刷新主页面查看效果。');
+            loadStats();
+            loadHistory();
+        }
+        
+        loadStats();
+        loadHistory();
+    </script>
+</body>
+</html>

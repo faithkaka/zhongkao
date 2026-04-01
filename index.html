@@ -7,6 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>浙江初中刷题打卡</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/user.css">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -14,25 +15,28 @@
         <!-- 首页 - 年级选择 -->
         <div id="home-page" class="page active">
             <div class="header">
+                <div class="header-user">
+                    <button class="user-switch-btn" onclick="app.showUserManager()">
+                        <span class="user-icon">👤</span>
+                        <span class="user-name" id="current-username">未登录</span>
+                        <span class="user-arrow">▼</span>
+                    </button>
+                </div>
                 <h1>📚 浙江初中刷题打卡</h1>
                 <p class="subtitle">2026 年最新版教材</p>
+                <p class="subtitle" style="font-size:12px; opacity:0.7; margin-top:5px;">💡 数据保存在当前浏览器，切换浏览器需重新登录</p>
             </div>
             
             <div class="grade-selector">
-                <h2>选择年级</h2>
-                <div class="grade-buttons">
-                    <button class="grade-btn" data-grade="7">七年级</button>
-                    <button class="grade-btn" data-grade="8">八年级</button>
-                    <button class="grade-btn" data-grade="9">九年级</button>
-                </div>
-            </div>
-            
-            <div class="semester-selector" id="semester-selector" style="display:none;">
                 <h2>选择学期</h2>
                 <div class="semester-buttons">
                     <button class="semester-btn" data-semester="upper">上册</button>
-                    <button class="semester-btn" data-semester="lower">下册</button>
+                    <button class="semester-btn selected" data-semester="lower">下册</button>
                 </div>
+            </div>
+            
+            <div class="quick-start-btn" style="text-align:center; margin:20px 0;">
+                <button class="grade-btn" style="width:100%; padding:15px; font-size:16px;" onclick="app.startPractice()">直接开始今日练习</button>
             </div>
             
             <div class="stats-preview" id="stats-preview">
@@ -51,6 +55,9 @@
                         <div class="stat-label">正确率</div>
                     </div>
                 </div>
+                <div id="stats-empty-tip" style="text-align:center; color:#999; font-size:13px; margin-top:15px; display:none;">
+                    💡 完成一次打卡练习后，这里会显示你的学习数据
+                </div>
             </div>
             
             <!-- 快捷入口 -->
@@ -67,6 +74,10 @@
                         <span class="quick-text">历史记录</span>
                         <span class="quick-count" id="history-count">0</span>
                     </button>
+                    <button class="quick-btn" onclick="app.showPreviewSelector()">
+                        <span class="quick-icon">🔮</span>
+                        <span class="quick-text">预览题库</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -77,7 +88,7 @@
                 <button class="back-btn" onclick="app.showPage('home')">← 返回</button>
                 <h1 id="practice-title">每日打卡</h1>
                 <div class="progress-info">
-                    <span id="question-counter">1/50</span>
+                    <span id="question-counter">1/30</span>
                     <span id="timer">00:00</span>
                 </div>
             </div>
@@ -115,7 +126,7 @@
                 <div class="result-details">
                     <div class="result-row">
                         <span>答对题数</span>
-                        <span id="result-correct">0/50</span>
+                        <span id="result-correct">0/30</span>
                     </div>
                     <div class="result-row">
                         <span>正确率</span>
@@ -175,10 +186,86 @@
                 <!-- 动态生成 -->
             </div>
         </div>
+
+        <!-- 预览选择页面 -->
+        <div id="preview-selector-page" class="page">
+            <div class="header">
+                <button class="back-btn" onclick="app.showPage('home')">← 返回</button>
+                <h1>🔮 题库预览</h1>
+                <p class="subtitle">查看未来几天的题目安排</p>
+            </div>
+            
+            <div class="preview-selector">
+                <div class="preview-form">
+                    <div class="form-group">
+                        <label>选择学期</label>
+                        <div class="semester-buttons">
+                            <button class="preview-semester-btn" data-semester="upper">上册</button>
+                            <button class="preview-semester-btn selected" data-semester="lower">下册</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>预览天数</label>
+                        <div class="preview-days-buttons">
+                            <button class="preview-days-btn active" data-days="3">3 天</button>
+                            <button class="preview-days-btn" data-days="5">5 天</button>
+                            <button class="preview-days-btn" data-days="7">7 天</button>
+                        </div>
+                    </div>
+                    
+                    <button class="preview-generate-btn" onclick="app.generatePreview()">
+                        <span class="btn-icon">✨</span>
+                        <span class="btn-text">立即预览</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 预览结果页面 -->
+        <div id="preview-result-page" class="page">
+            <div class="header">
+                <button class="back-btn" onclick="app.showPage('preview-selector')">← 返回</button>
+                <h1>📋 题库预览</h1>
+                <div class="preview-info" id="preview-info">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+            
+            <div class="preview-days-container" id="preview-days-container">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+
+        <!-- 用户管理页面 -->
+        <div id="user-manager-page" class="page">
+            <div class="header">
+                <button class="back-btn" onclick="app.showPage('home')">← 返回</button>
+                <h1>👤 用户管理</h1>
+            </div>
+            
+            <div class="user-manager">
+                <div class="add-user-section">
+                    <h3>➕ 新建用户</h3>
+                    <div class="add-user-form">
+                        <input type="text" id="new-username-input" placeholder="输入用户名" maxlength="10">
+                        <button class="add-user-btn" onclick="app.addUser()">添加</button>
+                    </div>
+                </div>
+                
+                <div class="user-list-section">
+                    <h3>👥 用户列表</h3>
+                    <div class="user-list" id="user-list">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <script src="js/data.js"></script>
-    <script src="js/storage.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/data.js?v=20260401_fix"></script>
+    <script src="js/grade7-lower.js?v=20260401"></script>
+    <script src="js/storage-api.js?v=20260401_db"></script>
+    <script src="js/app.js?v=20260401_db"></script>
 </body>
 </html>
