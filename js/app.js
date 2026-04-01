@@ -1,10 +1,9 @@
-// 刷题应用主逻辑
+// 刷题应用主逻辑 - 数据库版本（异步 API）
 const app = {
-    // 应用状态
     state: {
         currentPage: 'home',
-        selectedGrade: null,
-        selectedSemester: null,
+        selectedGrade: 7,
+        selectedSemester: 'lower',
         currentQuestions: [],
         currentIndex: 0,
         userAnswers: [],
@@ -14,453 +13,471 @@ const app = {
         elapsedSeconds: 0
     },
 
-    // 学期名称映射
-    semesterNames: {
-        'upper': '上册',
-        'lower': '下册'
-    },
+    semesterNames: { 'upper': '上册', 'lower': '下册' },
 
-    // 初始化
-    init() {
+    async init() {
+        await this.checkUserLogin();
         this.bindEvents();
-        this.updateStatsUI();
-        this.checkResumePractice();
+        await this.updateStatsUI();
+        await this.checkResumePractice();
     },
 
-    // 绑定事件
-    bindEvents() {
-        // 年级选择
-        document.querySelectorAll('.grade-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.grade-btn').forEach(b => b.classList.remove('selected'));
-                e.target.classList.add('selected');
-                this.state.selectedGrade = parseInt(e.target.dataset.grade);
-                document.getElementById('semester-selector').style.display = 'block';
-            });
-        });
+    async checkUserLogin() {
+        const users = await Storage.getUsers();
+        const currentUserId = Storage.getCurrentUserId();
+        
+        if (users.length === 0) {
+            // 自动创建默认用户
+            await Storage.createUser('默认用户');
+            this.updateUserDisplay();
+            return;
+        }
+        
+        if (!currentUserId || !users.find(u => u.id === currentUserId)) {
+            // 切换到第一个用户
+            Storage.switchUser(users[0].id);
+        }
+        
+        this.updateUserDisplay();
+    },
 
-        // 学期选择
+    updateUserDisplay() {
+        const users = Storage.getUsers();
+        const currentUserId = Storage.getCurrentUserId();
+        
+        // 异步获取用户列表
+        users.then(usersList => {
+            const currentUser = usersList.find(u => u.id === currentUserId);
+            const nameEl = document.getElementById('current-username');
+            if (nameEl) {
+                nameEl.textContent = currentUser ? currentUser.name : '未登录';
+            }
+        });
+    },
+
+    bindEvents() {
         document.querySelectorAll('.semester-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                if (!this.state.selectedGrade) {
-                    alert('请先选择年级！');
-                    return;
-                }
                 document.querySelectorAll('.semester-btn').forEach(b => b.classList.remove('selected'));
                 e.target.classList.add('selected');
                 this.state.selectedSemester = e.target.dataset.semester;
-                this.startPractice();
             });
         });
-
-        // 错题本筛选
-        document.querySelectorAll('.filter-btn').forEach(btn => {
+        
+        document.querySelectorAll('.preview-semester-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.renderWrongList(e.target.dataset.filter);
+                document.querySelectorAll('.preview-semester-btn').forEach(b => b.classList.remove('selected'));
+                e.target.classList.add('selected');
+                this.previewState = this.previewState || { grade: 7, semester: null, days: 3 };
+                this.previewState.semester = e.target.dataset.semester;
             });
         });
+        
+        document.querySelectorAll('.preview-days-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.preview-days-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.previewState = this.previewState || { grade: 7, semester: null, days: 3 };
+                this.previewState.days = parseInt(e.target.dataset.days);
+            });
+        });
+        
+        const input = document.getElementById('new-username-input');
+        if (input) {
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.addUser();
+            });
+        }
     },
 
-    // 检查是否有未完成的练习
-    checkResumePractice() {
-        const practiceState = Storage.getPracticeState();
-        if (practiceState) {
-            const resume = confirm('检测到未完成的练习，是否继续？');
-            if (resume) {
-                this.state = { ...this.state, ...practiceState };
+    async checkResumePractice() {
+        const state = await Storage.getPracticeState();
+        if (state && state.questions && state.questions.length > 0) {
+            if (confirm('检测到有未完成的练习，是否继续？')) {
+                this.state.currentQuestions = state.questions;
+                this.state.currentIndex = state.current_index || state.currentIndex || 0;
+                this.state.userAnswers = state.user_answers || state.userAnswers || [];
+                this.state.elapsedSeconds = state.elapsed_seconds || state.elapsedSeconds || 0;
                 this.showPage('practice');
+                this.startTimer();
                 this.renderQuestion();
             } else {
-                Storage.clearPracticeState();
+                await Storage.clearPracticeState();
             }
         }
     },
 
-    // 切换页面
-    showPage(pageName) {
-        // 隐藏所有页面
+    async showPage(pageName) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        // 显示目标页面
-        document.getElementById(`${pageName}-page`).classList.add('active');
-        this.state.currentPage = pageName;
-
-        // 页面特定初始化
-        if (pageName === 'home') {
-            this.updateStatsUI();
-        } else if (pageName === 'wrong') {
-            this.renderWrongList('all');
-        } else if (pageName === 'history') {
-            this.renderHistory();
+        const page = document.getElementById(pageName + '-page');
+        if (page) {
+            page.classList.add('active');
+            this.state.currentPage = pageName;
         }
+        
+        if (pageName === 'home') await this.updateStatsUI();
+        if (pageName === 'wrong') await this.renderWrongList('all');
+        if (pageName === 'history') await this.renderHistory();
     },
 
-    // 开始练习
-    startPractice() {
-        // 生成题目
-        this.state.currentQuestions = generateDailyQuestions(
-            this.state.selectedGrade, 
-            this.state.selectedSemester
-        );
+    async startPractice() {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = '加载中...';
         
-        if (this.state.currentQuestions.length === 0) {
-            alert('该年级题目暂未提供，已完成七年级上册第一批题目！');
+        const questions = getTodayQuestions(this.state.selectedGrade, this.state.selectedSemester);
+        
+        if (questions.length === 0) {
+            alert('题库加载失败，请刷新页面重试！');
+            btn.disabled = false;
+            btn.textContent = '直接开始今日练习';
             return;
         }
-
-        // 重置状态
+        
+        this.state.currentQuestions = questions;
         this.state.currentIndex = 0;
         this.state.userAnswers = [];
         this.state.selectedOption = null;
         this.state.elapsedSeconds = 0;
         this.state.startTime = Date.now();
-
-        // 设置页面标题
-        const gradeName = `${this.state.selectedGrade}年级${this.semesterNames[this.state.selectedSemester]}`;
-        document.getElementById('practice-title').textContent = `${gradeName} 每日打卡`;
-
-        // 延迟显示
-        setTimeout(() => {
+        
+        const semesterName = this.semesterNames[this.state.selectedSemester];
+        document.getElementById('practice-title').textContent = `七年级${semesterName} 每日打卡`;
+        
+        setTimeout(async () => {
             this.showPage('practice');
             this.startTimer();
             this.renderQuestion();
+            btn.disabled = false;
+            btn.textContent = '直接开始今日练习';
         }, 200);
     },
 
-    // 开始计时
     startTimer() {
         clearInterval(this.state.timerInterval);
-        this.state.timerInterval = setInterval(() => {
+        this.state.timerInterval = setInterval(async () => {
             this.state.elapsedSeconds++;
-            const minutes = Math.floor(this.state.elapsedSeconds / 60);
-            const seconds = this.state.elapsedSeconds % 60;
-            document.getElementById('timer').textContent = 
-                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            const mins = Math.floor(this.state.elapsedSeconds / 60).toString().padStart(2, '0');
+            const secs = (this.state.elapsedSeconds % 60).toString().padStart(2, '0');
+            const timerEl = document.getElementById('timer');
+            if (timerEl) timerEl.textContent = `${mins}:${secs}`;
+            
+            if (this.state.currentPage === 'practice') {
+                await Storage.savePracticeState(this.state);
+            }
         }, 1000);
     },
 
-    // 停止计时
     stopTimer() {
         clearInterval(this.state.timerInterval);
     },
 
-    // 渲染当前题目
     renderQuestion() {
-        const question = this.state.currentQuestions[this.state.currentIndex];
-        const totalQuestions = this.state.currentQuestions.length || 50;
-
-        // 更新进度
-        document.getElementById('question-counter').textContent = 
-            `${this.state.currentIndex + 1}/${totalQuestions}`;
-
-        // 显示科目标签
-        const subjectColors = {
-            '语文': '#667eea',
-            '数学': '#764ba2',
-            '英语': '#f93e55',
-            '科学': '#4CAF50',
-            '社会': '#FF9800'
-        };
-        const subjectTag = document.getElementById('subject-tag');
-        subjectTag.textContent = question.subject;
-        subjectTag.style.background = subjectColors[question.subject] || '#667eea';
-
-        // 显示题目
-        document.getElementById('question-text').textContent = question.question;
-
-        // 显示选项
-        const optionsContainer = document.getElementById('options-container');
-        optionsContainer.innerHTML = '';
-        question.options.forEach((option, index) => {
-            const optionEl = document.createElement('div');
-            optionEl.className = 'option';
-            optionEl.textContent = option;
-            optionEl.dataset.index = index;
-            optionEl.addEventListener('click', () => this.selectOption(index));
-            optionsContainer.appendChild(optionEl);
-        });
-
-        // 重置状态
-        this.state.selectedOption = null;
-        document.getElementById('feedback').style.display = 'none';
-        document.getElementById('submit-btn').disabled = false;
-        document.getElementById('submit-btn').style.display = 'block';
-
-        // 保存练习状态
-        this.savePracticeState();
-    },
-
-    // 选择选项
-    selectOption(index) {
-        if (document.getElementById('feedback').style.display === 'block') return;
+        const currentQ = this.state.currentQuestions[this.state.currentIndex];
+        if (!currentQ) return;
         
-        this.state.selectedOption = index;
-        document.querySelectorAll('.option').forEach((el, i) => {
-            el.classList.toggle('selected', i === index);
-        });
+        document.getElementById('question-counter').textContent = `${this.state.currentIndex + 1}/${this.state.currentQuestions.length}`;
+        document.getElementById('subject-tag').textContent = currentQ.subject;
+        document.getElementById('subject-tag').className = 'subject-tag ' + currentQ.subject;
+        document.getElementById('question-text').textContent = currentQ.question;
+        
+        const optionsHtml = currentQ.options.map((opt, idx) => {
+            return `<button class="option" data-idx="${idx}" onclick="app.selectOption(${idx})">${opt}</button>`;
+        }).join('');
+        
+        document.getElementById('options-container').innerHTML = optionsHtml;
+        document.getElementById('feedback').style.display = 'none';
+        this.state.selectedOption = null;
     },
 
-    // 提交答案
+    selectOption(idx) {
+        document.querySelectorAll('.option').forEach((btn, i) => {
+            btn.classList.toggle('selected', i === idx);
+        });
+        this.state.selectedOption = idx;
+    },
+
     submitAnswer() {
         if (this.state.selectedOption === null) {
             alert('请先选择一个答案！');
             return;
         }
-
-        const question = this.state.currentQuestions[this.state.currentIndex];
-        const selectedOptionText = question.options[this.state.selectedOption];
-        const selectedAnswer = selectedOptionText.charAt(0); // 'A', 'B', 'C', 'D'
-        const correctAnswer = question.answer;
-        const isCorrect = selectedAnswer === correctAnswer;
-
-        // 记录答案
-        this.state.userAnswers.push({
-            questionId: question.id,
-            selected: selectedAnswer,
-            correct: correctAnswer,
-            isCorrect: isCorrect
-        });
-
-        // 如果是错题，加入错题本
+        
+        const currentQ = this.state.currentQuestions[this.state.currentIndex];
+        const isCorrect = String.fromCharCode(65 + this.state.selectedOption) === currentQ.answer;
+        
+        this.state.userAnswers.push({ question: currentQ, selected: this.state.selectedOption, isCorrect });
+        
+        const feedback = document.getElementById('feedback');
+        document.getElementById('feedback-icon').textContent = isCorrect ? '✓' : '✗';
+        document.getElementById('feedback-icon').className = isCorrect ? 'feedback-icon correct' : 'feedback-icon wrong';
+        document.getElementById('feedback-text').textContent = isCorrect ? '回答正确！' : '回答错误！';
+        document.getElementById('feedback-text').className = isCorrect ? 'feedback-text correct' : 'feedback-text wrong';
+        document.getElementById('explanation').innerHTML = `<strong>正确答案：</strong>${currentQ.answer}<br><strong>解析：</strong>${currentQ.explanation}`;
+        feedback.style.display = 'block';
+        
         if (!isCorrect) {
-            Storage.addWrongQuestion(question, selectedAnswer);
+            Storage.addWrongQuestion(currentQ, String.fromCharCode(65 + this.state.selectedOption));
         }
-
-        // 显示反馈
-        this.showFeedback(isCorrect, question);
-
-        // 禁用提交按钮
-        document.getElementById('submit-btn').disabled = true;
-        document.getElementById('submit-btn').style.display = 'none';
-
-        // 标记选项
-        this.markOptions(selectedAnswer, correctAnswer);
     },
 
-    // 显示反馈
-    showFeedback(isCorrect, question) {
-        const feedbackEl = document.getElementById('feedback');
-        const feedbackIcon = document.getElementById('feedback-icon');
-        const feedbackText = document.getElementById('feedback-text');
-        const explanation = document.getElementById('explanation');
-
-        feedbackEl.style.display = 'block';
-        
-        if (isCorrect) {
-            feedbackIcon.textContent = '✅';
-            feedbackText.textContent = '回答正确！';
-            feedbackText.className = 'feedback-text correct';
-        } else {
-            feedbackIcon.textContent = '❌';
-            feedbackText.textContent = `回答错误！正确答案是 ${question.answer}`;
-            feedbackText.className = 'feedback-text wrong';
-        }
-
-        explanation.innerHTML = `<strong>解析：</strong>${question.explanation}`;
-        
-        // 保存练习状态
-        this.savePracticeState();
-    },
-
-    // 标记选项状态
-    markOptions(selected, correct) {
-        document.querySelectorAll('.option').forEach(el => {
-            const optionLetter = el.textContent.charAt(0);
-            el.classList.remove('selected');
-            if (optionLetter === correct) {
-                el.classList.add('correct');
-            } else if (optionLetter === selected && selected !== correct) {
-                el.classList.add('wrong');
-            }
-        });
-    },
-
-    // 下一题
     nextQuestion() {
         this.state.currentIndex++;
-        
         if (this.state.currentIndex >= this.state.currentQuestions.length) {
-            // 练习完成
             this.completePractice();
         } else {
             this.renderQuestion();
         }
     },
 
-    // 完成练习
-    completePractice() {
+    async completePractice() {
         this.stopTimer();
-        Storage.clearPracticeState();
-
-        const totalQuestions = this.state.userAnswers.length;
-        const correctCount = this.state.userAnswers.filter(a => a.isCorrect).length;
-        const accuracy = Math.round((correctCount / totalQuestions) * 100);
-
-        // 统计各科表现
-        const subjectStats = {};
-        SUBJECTS.forEach(sub => subjectStats[sub] = { correct: 0, total: 0 });
+        await Storage.clearPracticeState();
         
-        this.state.userAnswers.forEach((answer, index) => {
-            const question = this.state.currentQuestions[index];
-            subjectStats[question.subject].total++;
-            if (answer.isCorrect) {
-                subjectStats[question.subject].correct++;
-            }
+        const stats = { correct: 0, total: this.state.currentQuestions.length };
+        this.state.userAnswers.forEach(ans => { if (ans.isCorrect) stats.correct++; });
+        
+        const subjectStats = {};
+        this.state.currentQuestions.forEach((q, i) => {
+            const isCorrect = this.state.userAnswers[i]?.isCorrect || false;
+            subjectStats[q.subject] = subjectStats[q.subject] || { total: 0, correct: 0 };
+            subjectStats[q.subject].total++;
+            if (isCorrect) subjectStats[q.subject].correct++;
         });
-
-        // 保存历史记录
-        const historyRecord = {
+        
+        const mins = Math.floor(this.state.elapsedSeconds / 60).toString().padStart(2, '0');
+        const secs = (this.state.elapsedSeconds % 60).toString().padStart(2, '0');
+        
+        await Storage.addHistory({
             grade: this.state.selectedGrade,
             semester: this.state.selectedSemester,
-            totalQuestions: totalQuestions,
-            correctCount: correctCount,
-            accuracy: accuracy,
+            totalQuestions: stats.total,
+            correctCount: stats.correct,
+            accuracy: Math.round((stats.correct / stats.total) * 100),
             duration: this.state.elapsedSeconds,
-            subjectStats: subjectStats
-        };
-        Storage.addHistory(historyRecord);
-
-        // 显示结果
-        this.showResult(correctCount, totalQuestions, accuracy, subjectStats);
-    },
-
-    // 显示结果
-    showResult(correct, total, accuracy, subjectStats) {
-        document.getElementById('final-score').textContent = accuracy;
-        document.getElementById('result-correct').textContent = `${correct}/${total}`;
-        document.getElementById('result-rate').textContent = `${accuracy}%`;
-        
-        const minutes = Math.floor(this.state.elapsedSeconds / 60);
-        const seconds = this.state.elapsedSeconds % 60;
-        document.getElementById('result-time').textContent = 
-            `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-        // 显示各科表现
-        const breakdownEl = document.getElementById('subject-breakdown');
-        let breakdownHTML = '<h3>各科表现</h3>';
-        
-        SUBJECTS.forEach(subject => {
-            const stats = subjectStats[subject];
-            if (stats.total > 0) {
-                const subjectAccuracy = Math.round((stats.correct / stats.total) * 100);
-                breakdownHTML += `
-                    <div class="subject-row">
-                        <span class="subject-name">${subject}</span>
-                        <span class="subject-score">${stats.correct}/${stats.total} (${subjectAccuracy}%)</span>
-                    </div>
-                `;
-            }
+            subjectStats: subjectStats,
+            questionIds: this.state.currentQuestions.map(q => q.id)
         });
         
-        breakdownEl.innerHTML = breakdownHTML;
+        document.getElementById('final-score').textContent = Math.round((stats.correct / stats.total) * 100);
+        document.getElementById('result-correct').textContent = `${stats.correct}/${stats.total}`;
+        document.getElementById('result-rate').textContent = `${Math.round((stats.correct / stats.total) * 100)}%`;
+        document.getElementById('result-time').textContent = `${mins}:${secs}`;
+        
+        document.getElementById('subject-breakdown').innerHTML = '<h3>各科表现</h3>' + 
+            Object.entries(subjectStats).map(([sub, s]) => 
+                `<div class="breakdown-item"><span class="breakdown-name">${sub}</span>
+                <span class="breakdown-score">${s.correct}/${s.total} (${Math.round((s.correct/s.total)*100)}%)</span></div>`
+            ).join('');
+        
         this.showPage('complete');
     },
 
-    // 保存练习状态
-    savePracticeState() {
-        Storage.savePracticeState({
-            selectedGrade: this.state.selectedGrade,
-            selectedSemester: this.state.selectedSemester,
-            currentQuestions: this.state.currentQuestions,
-            currentIndex: this.state.currentIndex,
-            userAnswers: this.state.userAnswers,
-            elapsedSeconds: this.state.elapsedSeconds
-        });
-    },
-
-    // 更新首页统计
-    updateStatsUI() {
-        const stats = Storage.getStats();
-        document.getElementById('stat-days').textContent = stats.totalDays;
-        document.getElementById('stat-total').textContent = stats.totalQuestions;
-        document.getElementById('stat-correct').textContent = `${stats.accuracy}%`;
+    async updateStatsUI() {
+        const stats = await Storage.getStats();
+        const history = await Storage.getHistory();
         
-        // 更新快捷入口数字
-        const wrongs = Storage.getWrongQuestions();
+        document.getElementById('stat-days').textContent = stats.totalDays || 0;
+        document.getElementById('stat-total').textContent = stats.totalQuestions || 0;
+        document.getElementById('stat-correct').textContent = `${stats.accuracy || 0}%`;
+        
+        const emptyTip = document.getElementById('stats-empty-tip');
+        if (emptyTip) {
+            emptyTip.style.display = (stats.totalDays === 0 || !stats.totalDays) ? 'block' : 'none';
+        }
+        
+        const wrongs = await Storage.getWrongQuestions();
         document.getElementById('wrong-count').textContent = wrongs.length;
         document.getElementById('wrong-count').style.display = wrongs.length > 0 ? 'block' : 'none';
         
-        const history = Storage.getHistory();
         document.getElementById('history-count').textContent = history.length;
         document.getElementById('history-count').style.display = history.length > 0 ? 'block' : 'none';
     },
 
-    // 显示错题本
-    showWrongAnswers() {
-        this.showPage('wrong');
-    },
+    showWrongAnswers() { this.showPage('wrong'); },
 
-    // 渲染错题列表
-    renderWrongList(filter) {
-        const wrongList = Storage.getWrongQuestionsBySubject(filter);
+    async renderWrongList(filter) {
+        const wrongList = await Storage.getWrongQuestionsBySubject(filter);
         const listEl = document.getElementById('wrong-list');
         const clearBtn = document.getElementById('clear-wrong-btn');
-
         if (wrongList.length === 0) {
             listEl.innerHTML = '<div class="wrong-item" style="text-align:center; color:#999;">暂无错题</div>';
             clearBtn.style.display = 'none';
             return;
         }
-
         clearBtn.style.display = 'block';
         listEl.innerHTML = wrongList.map(wrong => `
             <div class="wrong-item">
-                <div class="wrong-subject">${wrong.subject} · ${wrong.date}</div>
+                <div class="wrong-subject">${wrong.subject} · ${wrong.created_at ? wrong.created_at.split(' ')[0] : ''}</div>
                 <div class="wrong-question">${wrong.question}</div>
-                <div class="wrong-answer">
-                    你的答案：<span style="color:#f44336">${wrong.userAnswer}</span> | 
-                    正确答案：<span style="color:#4CAF50">${wrong.answer}</span>
-                </div>
-                <div style="font-size:12px; color:#666; margin-top:5px; line-height:1.4;">
-                    ${wrong.explanation}
-                </div>
+                <div class="wrong-answer">你的答案：<span style="color:#f44336">${wrong.userAnswer}</span> | 正确答案：<span style="color:#4CAF50">${wrong.answer}</span></div>
+                <div style="font-size:12px; color:#666; margin-top:5px; line-height:1.4;">${wrong.explanation}</div>
             </div>
         `).join('');
     },
 
-    // 清空错题本
-    clearWrongBook() {
+    async clearWrongBook() {
         if (confirm('确定要清空所有错题吗？此操作不可恢复。')) {
-            Storage.clearWrongQuestions();
-            this.renderWrongList('all');
-            alert('错题本已清空！');
+            await Storage.clearWrongQuestions();
+            await this.renderWrongList('all');
+            await this.updateStatsUI();
         }
     },
 
-    // 渲染历史记录
-    renderHistory() {
-        const history = Storage.getHistory();
-        const listEl = document.getElementById('history-list');
-
+    async renderHistory() {
+        const history = await Storage.getHistory();
+        const container = document.getElementById('history-list');
         if (history.length === 0) {
-            listEl.innerHTML = '<div class="history-item" style="text-align:center; color:#999;">暂无历史记录</div>';
+            container.innerHTML = '<div class="history-empty" style="text-align:center; color:#999; padding:40px;">暂无历史记录</div>';
             return;
         }
+        container.innerHTML = history.slice(0, 20).map(h => `
+            <div class="history-item">
+                <div class="history-date">${h.date} ${h.time}</div>
+                <div class="history-subjects">${Object.keys(h.subjectStats || {}).join(' · ')}</div>
+                <div class="history-score">${h.correctCount}/${h.totalQuestions} · ${h.accuracy}%</div>
+                <div class="history-time">⏱ ${Math.floor(h.duration/60)}:${(h.duration%60).toString().padStart(2,'0')}</div>
+            </div>
+        `).join('') + (history.length > 20 ? '<div style="text-align:center; color:#999; padding:10px;">仅显示最近 20 条记录</div>' : '');
+    },
 
-        listEl.innerHTML = history.map(h => {
-            const semesterName = this.semesterNames[h.semester] || h.semester;
+    showPreviewSelector() {
+        this.showPage('preview-selector');
+        document.querySelectorAll('.preview-semester-btn').forEach(b => {
+            b.classList.toggle('selected', b.dataset.semester === 'lower');
+        });
+        document.querySelectorAll('.preview-days-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+        this.previewState = { grade: 7, semester: 'lower', days: 3 };
+    },
+
+    generatePreview() {
+        const state = this.previewState || { grade: 7, semester: 'lower', days: 3 };
+        const previewData = generateMultiDayQuestions(7, state.semester, state.days);
+        this.renderPreviewResult(previewData);
+        this.showPage('preview-result');
+    },
+
+    renderPreviewResult(previewData) {
+        const stats = Storage.getStats();
+        document.getElementById('preview-info').innerHTML = `
+            <span>七年级${this.semesterNames[this.previewState?.semester || 'lower']}</span>
+            <span>共 ${previewData.length} 天 · ${previewData.reduce((a,b)=>a+b.questions.length,0)} 题</span>
+        `;
+        
+        document.getElementById('preview-days-container').innerHTML = previewData.map((dayData, index) => {
+            const date = new Date();
+            date.setDate(date.getDate() + index);
+            const dateStr = date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', weekday: 'short' });
+            const subjectCount = {};
+            dayData.questions.forEach(q => { subjectCount[q.subject] = (subjectCount[q.subject] || 0) + 1; });
+            const subjectTags = Object.entries(subjectCount).sort((a, b) => b[1] - a[1]).map(([subject, count]) => 
+                `<span class="preview-subject-tag ${subject}">${subject} ${count}题</span>`
+            ).join('');
+            const questionPreviews = dayData.questions.filter((q, i) => i < 6).map(q => 
+                `<div class="preview-question-mini ${q.subject}"><span class="q-subject">${q.subject}</span><span class="q-text">${q.question.substring(0, 30)}${q.question.length > 30 ? '...' : ''}</span></div>`
+            ).join('');
             return `
-                <div class="history-item">
-                    <div>
-                        <div class="history-date">${h.date} ${h.time}</div>
-                        <div style="font-size:12px; color:#999; margin-top:3px;">
-                            ${h.grade}年级${semesterName} · ${h.duration}秒
+                <div class="preview-day-card">
+                    <div class="preview-day-header">
+                        <div class="day-number">第 ${index + 1} 天</div>
+                        <div class="day-date">${dateStr}</div>
+                    </div>
+                    <div class="preview-subjects">${subjectTags}</div>
+                    <div class="preview-questions-mini">${questionPreviews}${dayData.questions.length > 6 ? 
+                        `<div class="more-questions">+ ${dayData.questions.length - 6} 题</div>` : ''}</div>
+                </div>`;
+        }).join('');
+    },
+
+    // ========== 用户管理 ==========
+    async showUserManager() {
+        this.showPage('user-manager');
+        await this.renderUserList();
+        const input = document.getElementById('new-username-input');
+        if (input) {
+            input.value = '';
+            setTimeout(() => input.focus(), 100);
+        }
+    },
+
+    async renderUserList() {
+        const users = await Storage.getUsers();
+        const currentUserId = Storage.getCurrentUserId();
+        const container = document.getElementById('user-list');
+        
+        if (!container) return;
+        
+        if (users.length === 0) {
+            container.innerHTML = '<div class="user-empty">暂无用户，请先添加用户</div>';
+            return;
+        }
+        
+        container.innerHTML = users.map(user => {
+            const isCurrent = user.id === currentUserId;
+            return `
+                <div class="user-item ${isCurrent ? 'current' : ''}">
+                    <div class="user-info">
+                        <div class="user-avatar">👤</div>
+                        <div class="user-details">
+                            <div class="user-name-text">${user.name}</div>
+                            <div class="user-stats">${user.total_days || 0} 天 · ${user.total_questions || 0} 题</div>
                         </div>
                     </div>
-                    <div class="history-score">${h.accuracy}%</div>
-                </div>
-            `;
+                    <div class="user-actions">
+                        ${isCurrent 
+                            ? '<span class="user-current-badge">当前用户</span>' 
+                            : `<button class="user-btn switch" onclick="app.switchUser('${user.id}')">切换</button>`
+                        }
+                        ${users.length > 1 ? `<button class="user-btn delete" onclick="app.deleteUser('${user.id}')">删除</button>` : ''}
+                    </div>
+                </div>`;
         }).join('');
+    },
+
+    async addUser() {
+        const input = document.getElementById('new-username-input');
+        if (!input) return;
+        
+        const username = input.value.trim();
+        
+        if (!username) { alert('请输入用户名！'); return; }
+        if (username.length > 10) { alert('用户名不能超过 10 个字符！'); return; }
+        
+        try {
+            await Storage.createUser(username);
+            await this.renderUserList();
+            this.updateUserDisplay();
+            await this.updateStatsUI();
+            input.value = '';
+            input.focus();
+        } catch (error) {
+            alert(error.message || '创建失败');
+        }
+    },
+
+    async switchUser(userId) {
+        Storage.switchUser(userId);
+        await this.renderUserList();
+        this.updateUserDisplay();
+        await this.updateStatsUI();
+    },
+
+    async deleteUser(userId) {
+        if (!confirm('确定要删除该用户吗？该用户的所有学习数据将被清除，此操作不可恢复。')) return;
+        
+        try {
+            await Storage.deleteUser(userId);
+            await this.renderUserList();
+            this.updateUserDisplay();
+            await this.updateStatsUI();
+        } catch (error) {
+            alert(error.message || '删除失败');
+        }
     }
 };
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', () => {
-    app.init();
-});
+document.addEventListener('DOMContentLoaded', () => { app.init(); });
 
-// 监听返回按钮
 window.addEventListener('popstate', () => {
     if (app.state.currentPage !== 'home' && confirm('确定要退出练习吗？')) {
         app.stopTimer();
