@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>浙江初中刷题打卡</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <div id="app">
+        <!-- 首页 - 年级选择 -->
+        <div id="home-page" class="page active">
+            <div class="header">
+                <h1>📚 浙江初中刷题打卡</h1>
+                <p class="subtitle">2026 年最新版教材</p>
+            </div>
+            
+            <div class="grade-selector">
+                <h2>选择年级</h2>
+                <div class="grade-buttons">
+                    <button class="grade-btn" data-grade="7">七年级</button>
+                    <button class="grade-btn" data-grade="8">八年级</button>
+                    <button class="grade-btn" data-grade="9">九年级</button>
+                </div>
+            </div>
+            
+            <div class="semester-selector" id="semester-selector" style="display:none;">
+                <h2>选择学期</h2>
+                <div class="semester-buttons">
+                    <button class="semester-btn" data-semester="upper">上册</button>
+                    <button class="semester-btn" data-semester="lower">下册</button>
+                </div>
+            </div>
+            
+            <div class="stats-preview" id="stats-preview">
+                <h3>📊 学习统计</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-days">0</div>
+                        <div class="stat-label">打卡天数</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-total">0</div>
+                        <div class="stat-label">总题数</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-correct">0%</div>
+                        <div class="stat-label">正确率</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 快捷入口 -->
+            <div class="quick-access">
+                <h2>🚀 快捷入口</h2>
+                <div class="quick-buttons">
+                    <button class="quick-btn" onclick="app.showPage('wrong')">
+                        <span class="quick-icon">📝</span>
+                        <span class="quick-text">错题本</span>
+                        <span class="quick-count" id="wrong-count">0</span>
+                    </button>
+                    <button class="quick-btn" onclick="app.showPage('history')">
+                        <span class="quick-icon">📅</span>
+                        <span class="quick-text">历史记录</span>
+                        <span class="quick-count" id="history-count">0</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 每日打卡页面 -->
+        <div id="practice-page" class="page">
+            <div class="header">
+                <button class="back-btn" onclick="app.showPage('home')">← 返回</button>
+                <h1 id="practice-title">每日打卡</h1>
+                <div class="progress-info">
+                    <span id="question-counter">1/50</span>
+                    <span id="timer">00:00</span>
+                </div>
+            </div>
+            
+            <div class="question-container">
+                <div class="subject-tag" id="subject-tag">语文</div>
+                <div class="question-text" id="question-text">题目内容...</div>
+                <div class="options" id="options-container">
+                    <!-- 选项动态生成 -->
+                </div>
+            </div>
+            
+            <div class="feedback" id="feedback" style="display:none;">
+                <div class="feedback-icon" id="feedback-icon"></div>
+                <div class="feedback-text" id="feedback-text"></div>
+                <div class="explanation" id="explanation"></div>
+                <button class="next-btn" onclick="app.nextQuestion()">下一题 →</button>
+            </div>
+            
+            <button class="submit-btn" id="submit-btn" onclick="app.submitAnswer()">提交答案</button>
+        </div>
+
+        <!-- 完成页面 -->
+        <div id="complete-page" class="page">
+            <div class="header">
+                <h1>🎉 打卡完成!</h1>
+            </div>
+            
+            <div class="result-summary">
+                <div class="score-circle">
+                    <div class="score-value" id="final-score">0</div>
+                    <div class="score-label">总分</div>
+                </div>
+                
+                <div class="result-details">
+                    <div class="result-row">
+                        <span>答对题数</span>
+                        <span id="result-correct">0/50</span>
+                    </div>
+                    <div class="result-row">
+                        <span>正确率</span>
+                        <span id="result-rate">0%</span>
+                    </div>
+                    <div class="result-row">
+                        <span>用时</span>
+                        <span id="result-time">00:00</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="subject-breakdown" id="subject-breakdown">
+                <h3>各科表现</h3>
+                <!-- 动态生成 -->
+            </div>
+            
+            <div class="action-buttons">
+                <button class="action-btn primary" onclick="app.showPage('home')">返回首页</button>
+                <button class="action-btn" onclick="app.showWrongAnswers()">查看错题</button>
+            </div>
+        </div>
+
+        <!-- 错题本页面 -->
+        <div id="wrong-page" class="page">
+            <div class="header">
+                <button class="back-btn" onclick="app.showPage('home')">← 返回</button>
+                <h1>📝 错题本</h1>
+            </div>
+            
+            <div class="wrong-filters">
+                <button class="filter-btn active" data-filter="all">全部</button>
+                <button class="filter-btn" data-filter="语文">语文</button>
+                <button class="filter-btn" data-filter="数学">数学</button>
+                <button class="filter-btn" data-filter="英语">英语</button>
+                <button class="filter-btn" data-filter="科学">科学</button>
+                <button class="filter-btn" data-filter="社会">社会</button>
+            </div>
+            
+            <div class="wrong-list" id="wrong-list">
+                <!-- 动态生成 -->
+            </div>
+            
+            <button class="clear-btn" onclick="app.clearWrongBook()" style="display:none;" id="clear-wrong-btn">
+                清空错题本
+            </button>
+        </div>
+
+        <!-- 历史记录页面 -->
+        <div id="history-page" class="page">
+            <div class="header">
+                <button class="back-btn" onclick="app.showPage('home')">← 返回</button>
+                <h1>📅 历史记录</h1>
+            </div>
+            
+            <div class="history-list" id="history-list">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
