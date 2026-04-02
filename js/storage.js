@@ -1,350 +1,244 @@
-// 浏览器本地存储管理模块 - 多用户版本
+// 浏览器本地存储模块 - 纯前端版本（无需后端）
+// 适用于 GitHub Pages 部署
+
 const Storage = {
-    // 存储键名
-    KEYS: {
-        CURRENT_USER: 'zhongkao_current_user',
-        USERS: 'zhongkao_users',
-        PRACTICE_STATE: 'zhongkao_practice',
-        WRONG_QUESTIONS: 'zhongkao_wrongs',
-        HISTORY: 'zhongkao_history',
-        STATS: 'zhongkao_stats',
-        SETTINGS: 'zhongkao_settings'
-    },
-
-    // 获取当前用户 ID
+    // 当前用户 ID（从 sessionStorage 获取，页面关闭后清除）
     getCurrentUserId() {
-        return localStorage.getItem(this.KEYS.CURRENT_USER);
+        return sessionStorage.getItem('zhongkao_current_user');
     },
 
-    // 设置当前用户
     setCurrentUser(userId) {
-        localStorage.setItem(this.KEYS.CURRENT_USER, userId);
+        sessionStorage.setItem('zhongkao_current_user', userId);
     },
 
-    // 获取键名（带用户前缀）
-    getUserKey(key) {
-        const userId = this.getCurrentUserId();
-        return userId ? `${key}_${userId}` : key;
+    clearCurrentUser() {
+        sessionStorage.removeItem('zhongkao_current_user');
+    },
+
+    switchUser(userId) {
+        this.setCurrentUser(userId);
     },
 
     // 获取所有用户列表
     getUsers() {
-        const data = localStorage.getItem(this.KEYS.USERS);
-        return data ? JSON.parse(data) : [];
+        const users = localStorage.getItem('zhongkao_users');
+        return users ? JSON.parse(users) : [];
     },
 
-    // 保存用户列表
     saveUsers(users) {
-        localStorage.setItem(this.KEYS.USERS, JSON.stringify(users));
+        localStorage.setItem('zhongkao_users', JSON.stringify(users));
     },
 
     // 创建新用户
     createUser(username) {
         const users = this.getUsers();
-        const userId = 'user_' + Date.now().toString(36);
-        const newUser = {
-            id: userId,
+        const user = {
+            id: 'user_' + Date.now(),
             name: username,
             createdAt: new Date().toISOString(),
             totalDays: 0,
             totalQuestions: 0
         };
-        users.push(newUser);
+        users.push(user);
         this.saveUsers(users);
-        this.setCurrentUser(userId);
-        return newUser;
+        this.setCurrentUser(user.id);
+        return Promise.resolve(user);
     },
 
     // 删除用户
     deleteUser(userId) {
-        const users = this.getUsers();
-        const filtered = users.filter(u => u.id !== userId);
-        this.saveUsers(filtered);
+        let users = this.getUsers();
+        users = users.filter(u => u.id !== userId);
+        this.saveUsers(users);
         
-        // 如果是当前用户，切换到第一个用户
+        // 删除相关数据
+        const history = JSON.parse(localStorage.getItem('zhongkao_history') || '[]');
+        localStorage.setItem('zhongkao_history', JSON.stringify(history.filter(h => h.userId !== userId)));
+        
+        const wrongs = JSON.parse(localStorage.getItem('zhongkao_wrongs') || '[]');
+        localStorage.setItem('zhongkao_wrongs', JSON.stringify(wrongs.filter(w => w.userId !== userId)));
+        
+        const states = JSON.parse(localStorage.getItem('zhongkao_state') || '{}');
+        delete states[userId];
+        localStorage.setItem('zhongkao_state', JSON.stringify(states));
+        
         if (this.getCurrentUserId() === userId) {
-            const remaining = this.getUsers();
-            if (remaining.length > 0) {
-                this.setCurrentUser(remaining[0].id);
-            } else {
-                localStorage.removeItem(this.KEYS.CURRENT_USER);
-            }
+            this.clearCurrentUser();
         }
         
-        // 清除该用户的数据
-        this.clearUserData(userId);
-    },
-
-    // 清除特定用户的数据
-    clearUserData(userId) {
-        const keysToRemove = [
-            this.getUserKey(this.KEYS.PRACTICE_STATE),
-            this.getUserKey(this.KEYS.WRONG_QUESTIONS),
-            this.getUserKey(this.KEYS.HISTORY),
-            this.getUserKey(this.KEYS.STATS)
-        ];
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-    },
-
-    // 切换用户
-    switchUser(userId) {
-        this.setCurrentUser(userId);
-    },
-
-    // 保存当前用户信息
-    saveUser(user) {
-        localStorage.setItem(this.getUserKey('zhongkao_user'), JSON.stringify(user));
-    },
-
-    // 获取用户信息
-    getUser() {
-        const data = localStorage.getItem(this.getUserKey('zhongkao_user'));
-        return data ? JSON.parse(data) : null;
-    },
-
-    // 保存练习状态
-    savePracticeState(state) {
-        localStorage.setItem(this.getUserKey(this.KEYS.PRACTICE_STATE), JSON.stringify(state));
-    },
-
-    // 获取练习状态
-    getPracticeState() {
-        const data = localStorage.getItem(this.getUserKey(this.KEYS.PRACTICE_STATE));
-        return data ? JSON.parse(data) : null;
-    },
-
-    // 清空练习状态
-    clearPracticeState() {
-        localStorage.removeItem(this.getUserKey(this.KEYS.PRACTICE_STATE));
-    },
-
-    // 添加错题
-    addWrongQuestion(question, userAnswer) {
-        const wrongs = this.getWrongQuestions();
-        const wrongItem = {
-            id: question.id,
-            question: question.question,
-            options: question.options,
-            answer: question.answer,
-            userAnswer: userAnswer,
-            explanation: question.explanation,
-            subject: question.subject,
-            grade: question.grade,
-            semester: question.semester,
-            knowledgePoint: question.knowledgePoint,
-            timestamp: new Date().toISOString(),
-            date: new Date().toLocaleDateString('zh-CN')
-        };
-        
-        // 检查是否已存在
-const exists = wrongs.find(w => w.id === question.id);
-        if (!exists) {
-            wrongs.unshift(wrongItem);
-            localStorage.setItem(this.getUserKey(this.KEYS.WRONG_QUESTIONS), JSON.stringify(wrongs));
-        }
-    },
-
-    // 获取所有错题
-    getWrongQuestions() {
-        const data = localStorage.getItem(this.getUserKey(this.KEYS.WRONG_QUESTIONS));
-        return data ? JSON.parse(data) : [];
-    },
-
-    // 获取某科目的错题
-    getWrongQuestionsBySubject(subject) {
-        const wrongs = this.getWrongQuestions();
-        return subject === 'all' ? wrongs : wrongs.filter(w => w.subject === subject);
-    },
-
-    // 删除错题
-    removeWrongQuestion(questionId) {
-        const wrongs = this.getWrongQuestions();
-        const filtered = wrongs.filter(w => w.id !== questionId);
-        localStorage.setItem(this.getUserKey(this.KEYS.WRONG_QUESTIONS), JSON.stringify(filtered));
-    },
-
-    // 清空错题本
-    clearWrongQuestions() {
-        localStorage.setItem(this.getUserKey(this.KEYS.WRONG_QUESTIONS), JSON.stringify([]));
-    },
-
-    // 添加历史记录
-    addHistory(record) {
-        const history = this.getHistory();
-        const historyItem = {
-            id: Date.now().toString(),
-            date: new Date().toLocaleDateString('zh-CN'),
-            time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-            timestamp: new Date().toISOString(),
-            grade: record.grade,
-            semester: record.semester,
-            totalQuestions: record.totalQuestions,
-            correctCount: record.correctCount,
-            accuracy: record.accuracy,
-            duration: record.duration,
-            subjectStats: record.subjectStats || {},
-            questionIds: record.questionIds || []
-        };
-
-        history.unshift(historyItem);
-        if (history.length > 100) {
-            history.pop();
-        }
-        localStorage.setItem(this.getUserKey(this.KEYS.HISTORY), JSON.stringify(history));
-
-        // 更新统计
-        this.updateStats(record);
-        
-        // 更新用户列表中的统计数据
-        this.updateUserStats();
-    },
-
-    // 获取历史记录
-    getHistory() {
-        const data = localStorage.getItem(this.getUserKey(this.KEYS.HISTORY));
-        return data ? JSON.parse(data) : [];
+        return Promise.resolve(true);
     },
 
     // 获取统计数据
-    getStats() {
-        const data = localStorage.getItem(this.getUserKey(this.KEYS.STATS));
-        if (data) {
-            return JSON.parse(data);
-        }
-        
-        // 如果没有统计数据，尝试从历史记录中计算
-        const history = this.getHistory();
-        if (history.length > 0) {
-            const stats = {
-                totalDays: 0,
-                totalQuestions: 0,
-                totalCorrect: 0,
-                accuracy: 0,
-                streak: 0,
-                lastPracticeDate: null
-            };
-            
-            const usedDates = new Set();
-            history.forEach(record => {
-                stats.totalQuestions += record.totalQuestions || 0;
-                stats.totalCorrect += record.correctCount || 0;
-                
-                const dateKey = `${record.date}`;
-                if (!usedDates.has(dateKey)) {
-                    stats.totalDays++;
-                    usedDates.add(dateKey);
-                    stats.lastPracticeDate = record.date;
-                }
-            });
-            
-            if (stats.totalQuestions > 0) {
-                stats.accuracy = Math.round((stats.totalCorrect / stats.totalQuestions) * 100);
-            }
-            
-            localStorage.setItem(this.getUserKey(this.KEYS.STATS), JSON.stringify(stats));
-            return stats;
-        }
-        
-        return {
-            totalDays: 0,
-            totalQuestions: 0,
-            totalCorrect: 0,
-            accuracy: 0,
-            streak: 0,
-            lastPracticeDate: null
-        };
-    },
-
-    // 更新统计数据
-    updateStats(record) {
-        const stats = this.getStats();
-        const today = new Date().toLocaleDateString('zh-CN');
-        
-        stats.totalQuestions += record.totalQuestions;
-        stats.totalCorrect += record.correctCount;
-        
-        stats.accuracy = Math.round((stats.totalCorrect / stats.totalQuestions) * 100);
-        
-        if (stats.lastPracticeDate !== today) {
-            stats.totalDays++;
-            stats.lastPracticeDate = today;
-        }
-        
-        localStorage.setItem(this.getUserKey(this.KEYS.STATS), JSON.stringify(stats));
-    },
-
-    // 更新用户列表中的统计信息
-    updateUserStats() {
-        const users = this.getUsers();
-        const currentUserId = this.getCurrentUserId();
-        
-        if (currentUserId) {
-            const stats = this.getStats();
-            const userIndex = users.findIndex(u => u.id === currentUserId);
-            if (userIndex !== -1) {
-                users[userIndex].totalDays = stats.totalDays;
-                users[userIndex].totalQuestions = stats.totalQuestions;
-                this.saveUsers(users);
-            }
-        }
-    },
-
-    // 保存设置
-    saveSettings(settings) {
-        localStorage.setItem(this.getUserKey(this.KEYS.SETTINGS), JSON.stringify(settings));
-    },
-
-    // 获取设置
-    getSettings() {
-        const data = localStorage.getItem(this.getUserKey(this.KEYS.SETTINGS));
-        return data ? JSON.parse(data) : {
-            showExplanation: true,
-            autoNext: true,
-            soundEffect: false
-        };
-    },
-
-    // 清空当前用户所有数据
-    clearAll() {
+    async getStats() {
         const userId = this.getCurrentUserId();
-        if (userId) {
-            localStorage.removeItem(this.getUserKey(this.KEYS.PRACTICE_STATE));
-            localStorage.removeItem(this.getUserKey(this.KEYS.WRONG_QUESTIONS));
-            localStorage.removeItem(this.getUserKey(this.KEYS.HISTORY));
-            localStorage.removeItem(this.getUserKey(this.KEYS.STATS));
-            localStorage.removeItem(this.getUserKey(this.KEYS.SETTINGS));
-            localStorage.removeItem(this.getUserKey('zhongkao_user'));
+        if (!userId) {
+            return { totalDays: 0, totalQuestions: 0, totalCorrect: 0, accuracy: 0 };
         }
+        
+        const users = this.getUsers();
+        const user = users.find(u => u.id === userId);
+        const history = JSON.parse(localStorage.getItem('zhongkao_history') || '[]');
+        const userHistory = history.filter(h => h.userId === userId);
+        
+        const totalDays = new Set(userHistory.map(h => h.date)).size;
+        const totalQuestions = userHistory.reduce((sum, h) => sum + h.totalQuestions, 0);
+        const totalCorrect = userHistory.reduce((sum, h) => sum + h.correctCount, 0);
+        const accuracy = totalQuestions > 0 ? Math.round(totalCorrect / totalQuestions * 100) : 0;
+        
+        return { 
+            totalDays, 
+            totalQuestions: user?.totalQuestions || totalQuestions, 
+            totalCorrect, 
+            accuracy 
+        };
+    },
+
+    // 获取历史记录
+    async getHistory() {
+        const userId = this.getCurrentUserId();
+        if (!userId) return [];
+        
+        const history = JSON.parse(localStorage.getItem('zhongkao_history') || '[]');
+        return history
+            .filter(h => h.userId === userId)
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, 100);
+    },
+
+    // 添加历史记录
+    async addHistory(record) {
+        const userId = this.getCurrentUserId();
+        if (!userId) return;
+        
+        const history = JSON.parse(localStorage.getItem('zhongkao_history') || '[]');
+        const newRecord = {
+            id: 'history_' + Date.now(),
+            userId,
+            ...record,
+            createdAt: new Date().toISOString(),
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toISOString().split('T')[1].substr(0, 5)
+        };
+        history.push(newRecord);
+        localStorage.setItem('zhongkao_history', JSON.stringify(history));
+        
+        // 更新用户统计
+        const users = this.getUsers();
+        const user = users.find(u => u.id === userId);
+        if (user) {
+            user.totalQuestions = (user.totalQuestions || 0) + record.totalQuestions;
+            this.saveUsers(users);
+        }
+        
+        return newRecord;
+    },
+
+    // 获取错题
+    async getWrongQuestions() {
+        const userId = this.getCurrentUserId();
+        if (!userId) return [];
+        
+        const wrongs = JSON.parse(localStorage.getItem('zhongkao_wrongs') || '[]');
+        return wrongs.filter(w => w.userId === userId);
+    },
+
+    // 添加错题
+    async addWrongQuestion(question, userAnswer) {
+        const userId = this.getCurrentUserId();
+        if (!userId) return;
+        
+        const wrongs = JSON.parse(localStorage.getItem('zhongkao_wrongs') || '[]');
+        const exists = wrongs.find(w => w.userId === userId && w.questionId === question.id);
+        if (exists) return null;
+        
+        const newWrong = {
+            id: 'wrong_' + Date.now(),
+            userId,
+            questionId: question.id,
+            ...question,
+            userAnswer,
+            createdAt: new Date().toISOString()
+        };
+        wrongs.push(newWrong);
+        localStorage.setItem('zhongkao_wrongs', JSON.stringify(wrongs));
+        return newWrong;
+    },
+
+    // 删除错题
+    async removeWrongQuestion(wrongId) {
+        const userId = this.getCurrentUserId();
+        if (!userId) return;
+        
+        let wrongs = JSON.parse(localStorage.getItem('zhongkao_wrongs') || '[]');
+        wrongs = wrongs.filter(w => w.id !== wrongId);
+        localStorage.setItem('zhongkao_wrongs', JSON.stringify(wrongs));
+        return { success: true };
+    },
+
+    // 清空错题本
+    async clearWrongQuestions() {
+        const userId = this.getCurrentUserId();
+        if (!userId) return;
+        
+        let wrongs = JSON.parse(localStorage.getItem('zhongkao_wrongs') || '[]');
+        wrongs = wrongs.filter(w => w.userId !== userId);
+        localStorage.setItem('zhongkao_wrongs', JSON.stringify(wrongs));
+        return { success: true };
+    },
+
+    // 获取练习状态
+    async getPracticeState() {
+        const userId = this.getCurrentUserId();
+        if (!userId) return null;
+        
+        const state = localStorage.getItem('zhongkao_state');
+        if (!state) return null;
+        
+        const allStates = JSON.parse(state);
+        return allStates[userId] || null;
+    },
+
+    // 保存练习状态
+    async savePracticeState(state) {
+        const userId = this.getCurrentUserId();
+        if (!userId) return;
+        
+        const allStates = JSON.parse(localStorage.getItem('zhongkao_state') || '{}');
+        allStates[userId] = {
+            ...state,
+            updatedAt: new Date().toISOString()
+        };
+        localStorage.setItem('zhongkao_state', JSON.stringify(allStates));
+        return { success: true };
+    },
+
+    // 清除练习状态
+    async clearPracticeState() {
+        const userId = this.getCurrentUserId();
+        if (!userId) return;
+        
+        const allStates = JSON.parse(localStorage.getItem('zhongkao_state') || '{}');
+        delete allStates[userId];
+        localStorage.setItem('zhongkao_state', JSON.stringify(allStates));
+        return { success: true };
     },
 
     // 导出数据
-    exportData() {
+    async exportData() {
+        const userId = this.getCurrentUserId();
+        if (!userId) return null;
+        
+        const users = this.getUsers();
+        const user = users.find(u => u.id === userId);
+        const history = JSON.parse(localStorage.getItem('zhongkao_history') || '[]').filter(h => h.userId === userId);
+        const wrongs = JSON.parse(localStorage.getItem('zhongkao_wrongs') || '[]').filter(w => w.userId === userId);
+        
         return {
-            user: this.getUser(),
-            wrongQuestions: this.getWrongQuestions(),
-            history: this.getHistory(),
-            stats: this.getStats(),
-            settings: this.getSettings(),
+            user,
+            history,
+            wrongs,
             exportDate: new Date().toISOString()
         };
-    },
-
-    // 导入数据
-    importData(data) {
-        if (data.wrongQuestions) {
-            localStorage.setItem(this.getUserKey(this.KEYS.WRONG_QUESTIONS), JSON.stringify(data.wrongQuestions));
-        }
-        if (data.history) {
-            localStorage.setItem(this.getUserKey(this.KEYS.HISTORY), JSON.stringify(data.history));
-        }
-        if (data.stats) {
-            localStorage.setItem(this.getUserKey(this.KEYS.STATS), JSON.stringify(data.stats));
-        }
-        if (data.user) {
-            localStorage.setItem(this.getUserKey('zhongkao_user'), JSON.stringify(data.user));
-        }
-        if (data.settings) {
-            localStorage.setItem(this.getUserKey(this.KEYS.SETTINGS), JSON.stringify(data.settings));
-        }
     }
 };

@@ -473,6 +473,24 @@ const app = {
         } catch (error) {
             alert(error.message || '删除失败');
         }
+    },
+
+    // 导出数据（可在用户管理中添加导出功能）
+    async exportUserData() {
+        const data = await Storage.exportData();
+        if (!data) {
+            alert('当前没有用户数据');
+            return;
+        }
+        
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `zhongkao-data-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
     }
 };
 
