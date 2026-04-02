@@ -445,8 +445,28 @@ class APIHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+def get_local_ip():
+    """获取本机局域网 IP 地址"""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return '127.0.0.1'
+
 def run_server(port=8088):
     init_db()
+    local_ip = get_local_ip()
+    print("\n" + "="*50)
+    print("🚀 中考刷题应用后端服务已启动")
+    print("="*50)
+    print(f"📍 本地访问：http://localhost:{port}")
+    print(f"📱 局域网访问：http://{local_ip}:{port}")
+    print(f"💡 手机访问请确保在同一 WiFi 网络")
+    print("="*50 + "\n")
     server = HTTPServer(('0.0.0.0', port), APIHandler)
     print("🚀 中考刷题应用后端服务启动成功！")
     print("📊 数据库路径:", DB_PATH)
